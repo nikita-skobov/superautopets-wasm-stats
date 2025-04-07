@@ -1,0 +1,10 @@
+[package]
+name = "poem-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+poem = { version = "3.1.8", features = ["static-files", "rustls"] }
+tokio = { version = "1.39.1", features = ["rt-multi-thread", "macros"] }
+serde = { version = "1.0", features = ["derive"]}
+serde_json = "*"
