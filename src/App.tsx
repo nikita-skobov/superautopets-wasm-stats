@@ -76,13 +76,6 @@ function App() {
           wasmMemory.set(data, ptr);
           sendLog(`successfully set wasmmemory`);
 
-          // const abData = new Uint8Array(ab);
-          // sendLog(`got abData: ${abData.byteLength}, ${abData.byteOffset}`);
-          // // @ts-ignore
-          // const myData = new Uint8Array(wasm.instance.exports.memory, abData.byteOffset, abData.byteLength);
-          // sendLog(`created uint8array of wasm exports memory 0-${abData.byteLength}`);
-          // myData.set(abData, 0);
-          // sendLog(`set my data with contents of ab: ${ab.byteLength}, ${abData.byteLength}`);
           const numBytesToSum = ab.byteLength;
           // @ts-ignore
           let res = wasm.instance.exports.wasm_entrypoint(0, numBytesToSum);

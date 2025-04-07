@@ -1,6 +1,11 @@
 use poem::{endpoint::StaticFilesEndpoint, handler, listener::{Listener, RustlsCertificate, RustlsConfig, TcpListener}, post, web::Json, Route, Server};
 use serde::{Deserialize, Serialize};
 
+// these are copied from the example here:
+// they do not represent any real cert by any means.
+// the only reason we need TLS is because the browser directory api
+// is only enabled in secure contexts, so we host this server on a local network
+// such that another device can access it (cell phone) and via https
 const CERT: &str = r#"
 -----BEGIN CERTIFICATE-----
 MIIEADCCAmigAwIBAgICAcgwDQYJKoZIhvcNAQELBQAwLDEqMCgGA1UEAwwhcG9u

@@ -1,31 +1,3 @@
-// #[link(wasm_import_module = "host")]
-// extern "C" {
-//     fn get_host_data_size() -> u32;
-//     fn get_host_data(ptr: *const u8, len: u32);
-//     fn set_host_data(ptr: *const u8, len: u32);
-// }
-
-// fn fill_data_from_host() -> Vec<u8> {
-//     let data = unsafe {
-//         let len = get_host_data_size() as usize;
-//         let mut data: Vec<u8> = Vec::with_capacity(len);
-//         data.set_len(len);
-//         let ptr = data.as_ptr();
-//         let len = data.len();
-//         get_host_data(ptr, len as _);
-//         data
-//     };
-//     data
-// }
-
-// fn set_data_for_host(out_data: Vec<u8>) {
-//     unsafe {
-//         let ptr = out_data.as_ptr();
-//         let len = out_data.len();
-//         set_host_data(ptr, len as _);
-//     }
-// }
-
 fn get_image_width(bytes: &[u8]) -> Result<u32, String> {
     let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
     Ok(img.width())
