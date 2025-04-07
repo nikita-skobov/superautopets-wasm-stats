@@ -1,0 +1,17 @@
+[package]
+name = "wasm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+image = { version = "0.25.6", default-features = false, features = ["png"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+
+[profile.release]
+lto = true
+opt-level = 3
+strip = "symbols"
+codegen-units = 1
