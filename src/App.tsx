@@ -22,9 +22,7 @@ async function getAllFileKeys(dirHandle: any): Promise<string[]> {
 }
 
 async function getFile(dirHandle: any, fileKey: string): Promise<File> {
-  sendLog(`requesting filekey: ${fileKey}`);
   const fileHandle = await dirHandle.getFileHandle(fileKey);
-  sendLog(`got file handle for ${fileKey}`);
   const file: File = await fileHandle.getFile();
   return file;
 }
@@ -49,37 +47,52 @@ function App() {
   const [wasm, setWasm] = useState<WebAssembly.WebAssemblyInstantiatedSource | null>(null);
   const [debugWasmResult, setDebugWasmResult] = useState('unknown wasm result...');
   const [dirHandle, setDirHandle] = useState(null);
+  const [messages, setMessages] = useState<string[]>([]);
+  const [totalWins, setTotalWins] = useState(0);
   useEffect(() => {
     if (!dirHandle || !wasm) { return }
     const doStuff = async () => {
       try {
         const fileKeys = await getAllFileKeys(dirHandle);
         sendLog('got file keys');
-        // const len = fileKeys.length;
-        const len = 2;
+        const len = fileKeys.length;
         for (let i = 0; i < len; i += 1) {
-          const file = await getFile(dirHandle, fileKeys[i]);
+          const fileKey = `${fileKeys[i]}`;
+          const file = await getFile(dirHandle, fileKey);
           sendLog(`got file file ${file.name}. size: ${file.size}`);
           const ab = await file.arrayBuffer();
-          sendLog(`got arrayBuffer: ${ab.byteLength}`);
-
+          // @ts-ignore
+          const ptr = wasm.instance.exports.alloc(file.size);
+          // @ts-ignore
+          var mem = new Uint8Array(wasm.instance.exports.memory.buffer, ptr, file.size);
+          // copy the content of the file into the memory buffer
+          const abWindow = new Uint8Array(ab);
+          mem.set(abWindow);
 
           // @ts-ignore
-          const wasmMemory = new Uint8Array(wasm.instance.exports.memory.buffer);
-          sendLog(`got wasmMemory: ${wasmMemory.byteOffset}, ${wasmMemory.byteLength}`);
+          let res: number = wasm.instance.exports.wasm_entrypoint(ptr, file.size);
+          if (res == -1) {
+            sendLog(`not a pets screenshot: ${fileKey}`);
+            continue;
+          }
 
-          const data = new Uint8Array(ab); // wrap ArrayBuffer
-          const ptr = 0; // assume offset 0 or use a proper allocator in real code
-          sendLog(`got new data array: ${data.byteOffset}, ${data.byteLength}`);
-      
-          // Copy your buffer into wasm memory
-          wasmMemory.set(data, ptr);
-          sendLog(`successfully set wasmmemory`);
-
-          const numBytesToSum = ab.byteLength;
-          // @ts-ignore
-          let res = wasm.instance.exports.wasm_entrypoint(0, numBytesToSum);
-          sendLog(`got wasm result for summing first ${numBytesToSum}bytes! ${res}`);
+          const mask = 1 << 3;
+          let numHearts = res;
+          let hasBandage = false;
+          if ((res & mask) != 0) {
+            // has bandage, need to clear the bit
+            numHearts = numHearts &= ~mask;
+            hasBandage = true;
+          }
+          setMessages((prev) => {
+            const newPrev = [...prev];
+            newPrev.push(`${fileKey} : numHearts=${numHearts}, hasBandage=${hasBandage}`);
+            return newPrev;
+          });
+          setTotalWins((prev) => {
+            return prev + 1;
+          });
+          sendLog(`${fileKey} : numHearts=${numHearts}, hasBandage=${hasBandage}`);
         }
         sendLog(`got all ${fileKeys.length} files`);
 
@@ -96,9 +109,12 @@ function App() {
       sendLog('loading wasm...');
       try {
         const memory = new WebAssembly.Memory({
-          initial: 200,
+          initial: 10,
+          maximum: 200,
         });
         const instance = await WebAssembly.instantiateStreaming(fetch("wasm.wasm"), {js: { mem: memory }});
+        // @ts-ignore
+        instance.instance.exports.memory.grow(190);
         // @ts-ignore
         const myData = new Uint8Array(instance.instance.exports.memory.buffer, 0, 10);
         myData.set([2,1,1,1,1,1,1,1,1,1]);
@@ -130,6 +146,10 @@ function App() {
       >
         pick directory
       </button>
+      <h3>total wins: {totalWins}</h3>
+      <ul>
+        {messages.map(m => <li key={m}>{m}</li>)}
+      </ul>
     </>
   )
 }
