@@ -37,6 +37,12 @@ function sendLog(log: any) {
   })
 }
 
+type SAPScreenshot = {
+  fileKey: string;
+  numHearts: number;
+  hasBandage: boolean;
+};
+
 function App() {
   useEffect(() => {
     window.onerror = (errorMsg, _url, lineNumber) => {
@@ -47,7 +53,7 @@ function App() {
   const [wasm, setWasm] = useState<WebAssembly.WebAssemblyInstantiatedSource | null>(null);
   const [debugWasmResult, setDebugWasmResult] = useState('unknown wasm result...');
   const [dirHandle, setDirHandle] = useState(null);
-  const [messages, setMessages] = useState<string[]>([]);
+  const [screenshots, setScreenshots] = useState<SAPScreenshot[]>([]);
   const [totalWins, setTotalWins] = useState(0);
   const [startDateValue, setStartDateValue] = useState(0);
   useEffect(() => {
@@ -97,9 +103,9 @@ function App() {
             numHearts = numHearts &= ~mask;
             hasBandage = true;
           }
-          setMessages((prev) => {
+          setScreenshots((prev) => {
             const newPrev = [...prev];
-            newPrev.push(`${fileKey} : numHearts=${numHearts}, hasBandage=${hasBandage}`);
+            newPrev.push({ fileKey, numHearts, hasBandage });
             return newPrev;
           });
           setTotalWins((prev) => {
@@ -174,9 +180,18 @@ function App() {
         }}
       />
       <ul>
-        {messages.map(m => <li key={m}>{m}</li>)}
+        {screenshots.map(m => <ScreenshotItem key={m.fileKey} screenshot={m} />)}
       </ul>
     </>
+  )
+}
+
+function ScreenshotItem({ screenshot }: { screenshot: SAPScreenshot}) {
+  const bandageText = screenshot.hasBandage ? 'has bandage' : '';
+  return (
+    <li>
+      {screenshot.fileKey} has {screenshot.numHearts} {bandageText}
+    </li>
   )
 }
 
