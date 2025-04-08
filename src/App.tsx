@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 async function getDir(setDirHandle: (h: any) => void) {
@@ -68,7 +68,6 @@ function App() {
   const [debugWasmResult, setDebugWasmResult] = useState('unknown wasm result...');
   const [dirHandle, setDirHandle] = useState(null);
   const [screenshots, setScreenshots] = useState<SAPScreenshot[]>([]);
-  const [totalWins, setTotalWins] = useState(0);
   const [startDateValue, setStartDateValue] = useState(0);
   const appendCachedData = useCallback((obj: SAPScreenshot) => {
     setCachedDataState((prev) => {
@@ -150,9 +149,6 @@ function App() {
             return newPrev;
           });
           appendCachedData(sapscreenshot);
-          setTotalWins((prev) => {
-            return prev + 1;
-          });
           sendLog(`${fileKey} : numHearts=${numHearts}, hasBandage=${hasBandage}`);
         }
         sendLog(`got all ${fileKeys.length} files`);
@@ -191,6 +187,10 @@ function App() {
       doStuff();
     }
   }, [wasm, setWasm, setDebugWasmResult]);
+
+  const totalWins = useMemo(() => {
+    return screenshots.filter((s) => !s.invalid).length
+  }, [screenshots]);
 
   if (!wasm) {
     return <div>loading wasm...</div>
