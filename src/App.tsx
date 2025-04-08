@@ -49,6 +49,7 @@ function App() {
   const [dirHandle, setDirHandle] = useState(null);
   const [messages, setMessages] = useState<string[]>([]);
   const [totalWins, setTotalWins] = useState(0);
+  const [startDateValue, setStartDateValue] = useState(0);
   useEffect(() => {
     if (!dirHandle || !wasm) { return }
     const doStuff = async () => {
@@ -58,6 +59,18 @@ function App() {
         const len = fileKeys.length;
         for (let i = 0; i < len; i += 1) {
           const fileKey = `${fileKeys[i]}`;
+          const match = fileKey.match(/_(\d*)-/);
+          let date = 99999999;
+          if (match) {
+            const num = parseInt(match?.[1]);
+            if (!Number.isNaN(num) && num > 0) {
+              date = num;
+            }
+          }
+          // skip dates that the user specified as being before their desired startDateValue
+          if (date < startDateValue) {
+            continue
+          }
           const file = await getFile(dirHandle, fileKey);
           sendLog(`got file file ${file.name}. size: ${file.size}`);
           const ab = await file.arrayBuffer();
@@ -147,6 +160,19 @@ function App() {
         pick directory
       </button>
       <h3>total wins: {totalWins}</h3>
+      <label>start at date: {startDateValue}</label>
+      <input
+        disabled={Boolean(dirHandle)}
+        type="text"
+        value={startDateValue}
+        onChange={(e) => {
+          e.preventDefault();
+          const num = parseInt(e.target.value);
+          if (!Number.isNaN(num) && num > 0) {
+            setStartDateValue(num);
+          }
+        }}
+      />
       <ul>
         {messages.map(m => <li key={m}>{m}</li>)}
       </ul>
