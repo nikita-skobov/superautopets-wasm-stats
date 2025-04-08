@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 
 async function getDir(setDirHandle: (h: any) => void) {
@@ -41,7 +41,20 @@ type SAPScreenshot = {
   fileKey: string;
   numHearts: number;
   hasBandage: boolean;
+  // set to true for files that arent actually a SAP screenshot
+  invalid?: boolean;
 };
+
+function getCachedData(): { [key: string]: SAPScreenshot } {
+  const screenshotmap = window.localStorage.getItem('sapscreenshots')
+  if (!screenshotmap) { return {} }
+  try {
+    const obj = JSON.parse(screenshotmap);
+    return obj;
+  } catch (e) {
+    return {};
+  }
+}
 
 function App() {
   useEffect(() => {
@@ -50,12 +63,26 @@ function App() {
       return false;
     }
   }, []);
+  const [cachedData, setCachedDataState] = useState(getCachedData());
   const [wasm, setWasm] = useState<WebAssembly.WebAssemblyInstantiatedSource | null>(null);
   const [debugWasmResult, setDebugWasmResult] = useState('unknown wasm result...');
   const [dirHandle, setDirHandle] = useState(null);
   const [screenshots, setScreenshots] = useState<SAPScreenshot[]>([]);
   const [totalWins, setTotalWins] = useState(0);
   const [startDateValue, setStartDateValue] = useState(0);
+  const appendCachedData = useCallback((obj: SAPScreenshot) => {
+    setCachedDataState((prev) => {
+      const newObj = { ...prev };
+      newObj[obj.fileKey] = obj;
+      try {
+        const serialized = JSON.stringify(newObj);
+        window.localStorage.setItem('sapscreenshots', serialized);
+      } catch (e: any) {
+        sendLog(`failed to serialize cached data: ${e.toString()}`);
+      }
+      return newObj;
+    })
+  }, [setCachedDataState]);
   useEffect(() => {
     if (!dirHandle || !wasm) { return }
     const doStuff = async () => {
@@ -65,6 +92,18 @@ function App() {
         const len = fileKeys.length;
         for (let i = 0; i < len; i += 1) {
           const fileKey = `${fileKeys[i]}`;
+          const cachedObj = cachedData?.[fileKey];
+          if (cachedObj) {
+            if (!cachedObj.invalid) {
+              setScreenshots((prev) => {
+                const newPrev = [...prev];
+                newPrev.push(cachedObj);
+                return newPrev;
+              });
+              sendLog(`skipping processing ${fileKey} since its already cached`);
+            }
+            continue;
+          }
           const match = fileKey.match(/_(\d*)-/);
           let date = 99999999;
           if (match) {
@@ -92,6 +131,7 @@ function App() {
           let res: number = wasm.instance.exports.wasm_entrypoint(ptr, file.size);
           if (res == -1) {
             sendLog(`not a pets screenshot: ${fileKey}`);
+            appendCachedData({ fileKey, numHearts: 0, hasBandage: false, invalid: true });
             continue;
           }
 
@@ -103,11 +143,13 @@ function App() {
             numHearts = numHearts &= ~mask;
             hasBandage = true;
           }
+          const sapscreenshot: SAPScreenshot = { fileKey, numHearts, hasBandage };
           setScreenshots((prev) => {
             const newPrev = [...prev];
-            newPrev.push({ fileKey, numHearts, hasBandage });
+            newPrev.push(sapscreenshot);
             return newPrev;
           });
+          appendCachedData(sapscreenshot);
           setTotalWins((prev) => {
             return prev + 1;
           });
