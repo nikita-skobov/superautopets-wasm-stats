@@ -27,7 +27,10 @@ async function getFile(dirHandle: any, fileKey: string): Promise<File> {
   return file;
 }
 
-function sendLog(log: any) {
+function sendLog(log: any, alsoConsoleLog?: boolean) {
+  if (alsoConsoleLog) {
+    console.log(log);
+  }
   fetch("/log", {
     method: 'POST',
     headers: {
@@ -87,7 +90,6 @@ function App() {
     const doStuff = async () => {
       try {
         const fileKeys = await getAllFileKeys(dirHandle);
-        sendLog('got file keys');
         const len = fileKeys.length;
         for (let i = 0; i < len; i += 1) {
           const fileKey = `${fileKeys[i]}`;
@@ -99,10 +101,10 @@ function App() {
                 newPrev.push(cachedObj);
                 return newPrev;
               });
-              sendLog(`skipping processing ${fileKey} since its already cached`);
             }
             continue;
           }
+
           const match = fileKey.match(/_(\d*)-/);
           let date = 99999999;
           if (match) {
@@ -192,6 +194,45 @@ function App() {
     return screenshots.filter((s) => !s.invalid).length
   }, [screenshots]);
 
+  const getDay = (dayOfWeek: number, datestring: string): boolean => {
+    const match = datestring.match(/_(\d*)-/);
+    let dateStr = '19900101';
+    if (match) {
+      dateStr = match?.[1] ?? '19900101';
+    }
+
+    const year = parseInt(dateStr.slice(0, 4), 10);
+    const month = parseInt(dateStr.slice(4, 6), 10) - 1; // JS Date months are 0-based
+    const day = parseInt(dateStr.slice(6, 8), 10);
+  
+    const date = new Date(year, month, day);
+    
+    // JS Date.getDay(): 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    // Shift it so Monday = 0, ..., Sunday = 6
+    const jsDay = date.getDay();
+    const shiftedDay = (jsDay + 6) % 7;
+    return shiftedDay === dayOfWeek;
+  };
+
+  const dayStats = useMemo(() => {
+    const monday = screenshots.map(s => getDay(0, s.fileKey)).filter(Boolean).length;
+    const tuesday = screenshots.map(s => getDay(1, s.fileKey)).filter(Boolean).length;
+    const wednesday = screenshots.map(s => getDay(2, s.fileKey)).filter(Boolean).length;
+    const thursday = screenshots.map(s => getDay(3, s.fileKey)).filter(Boolean).length;
+    const friday = screenshots.map(s => getDay(4, s.fileKey)).filter(Boolean).length;
+    const saturday = screenshots.map(s => getDay(5, s.fileKey)).filter(Boolean).length;
+    const sunday = screenshots.map(s => getDay(6, s.fileKey)).filter(Boolean).length;
+    return {
+      monday,
+      tuesday,
+      wednesday,
+      thursday,
+      friday,
+      saturday,
+      sunday
+    }
+  }, [screenshots]);
+
   if (!wasm) {
     return <div>loading wasm...</div>
   }
@@ -208,6 +249,15 @@ function App() {
         pick directory
       </button>
       <h3>total wins: {totalWins}</h3>
+      <ol>
+        <li>wins on monday: {dayStats.monday} </li>
+        <li>wins on tuesday: {dayStats.tuesday} </li>
+        <li>wins on wednesday: {dayStats.wednesday} </li>
+        <li>wins on thursday: {dayStats.thursday} </li>
+        <li>wins on friday: {dayStats.friday} </li>
+        <li>wins on saturday: {dayStats.saturday} </li>
+        <li>wins on sunday: {dayStats.sunday} </li>
+      </ol>
       <label>start at date: {startDateValue}</label>
       <input
         disabled={Boolean(dirHandle)}
