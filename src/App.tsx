@@ -43,6 +43,7 @@ function sendLog(log: any, alsoConsoleLog?: boolean) {
 type SAPScreenshot = {
   fileKey: string;
   numHearts: number;
+  turnCount: number;
   hasBandage: boolean;
   // set to true for files that arent actually a SAP screenshot
   invalid?: boolean;
@@ -129,22 +130,35 @@ function App() {
           mem.set(abWindow);
 
           // @ts-ignore
-          let res: number = wasm.instance.exports.wasm_entrypoint(ptr, file.size);
-          if (res == -1) {
+          let res: BigInt = BigInt(wasm.instance.exports.wasm_entrypoint(ptr, file.size));
+          if (res === -1n) {
             sendLog(`not a pets screenshot: ${fileKey}`);
-            appendCachedData({ fileKey, numHearts: 0, hasBandage: false, invalid: true });
+            appendCachedData({ fileKey, numHearts: 0, hasBandage: false, invalid: true, turnCount: 0 });
             continue;
           }
 
-          const mask = 1 << 3;
-          let numHearts = res;
+          const mask = BigInt(1 << 3);
+          // @ts-ignore
+          let numHearts = res & 15n; // get only the 4 LSB bits
           let hasBandage = false;
+          // @ts-ignore
           if ((res & mask) != 0) {
             // has bandage, need to clear the bit
             numHearts = numHearts &= ~mask;
             hasBandage = true;
           }
-          const sapscreenshot: SAPScreenshot = { fileKey, numHearts, hasBandage };
+          // @ts-ignore
+          let turnCount = res >> 4n;
+          let base = 10n;
+          // @ts-ignore
+          if ((turnCount & 16n) != 0) {
+            base = 20n;
+            turnCount -= 10n;
+          }
+          //                 remove the 0b10000 bit
+          // @ts-ignore
+          turnCount = base + (turnCount & 15n);
+          const sapscreenshot: SAPScreenshot = { fileKey, numHearts: Number(numHearts), hasBandage, turnCount: Number(turnCount) };
           setScreenshots((prev) => {
             const newPrev = [...prev];
             newPrev.push(sapscreenshot);
@@ -156,6 +170,7 @@ function App() {
         sendLog(`got all ${fileKeys.length} files`);
 
       } catch (e: any) {
+        console.error(e);
         sendLog({ err: e.toString(), msg: 'failed to get all files' });
       }
       sendLog('after getFileBytes...');
@@ -215,13 +230,13 @@ function App() {
   };
 
   const dayStats = useMemo(() => {
-    const monday = screenshots.map(s => getDay(0, s.fileKey)).filter(Boolean).length;
-    const tuesday = screenshots.map(s => getDay(1, s.fileKey)).filter(Boolean).length;
-    const wednesday = screenshots.map(s => getDay(2, s.fileKey)).filter(Boolean).length;
-    const thursday = screenshots.map(s => getDay(3, s.fileKey)).filter(Boolean).length;
-    const friday = screenshots.map(s => getDay(4, s.fileKey)).filter(Boolean).length;
-    const saturday = screenshots.map(s => getDay(5, s.fileKey)).filter(Boolean).length;
-    const sunday = screenshots.map(s => getDay(6, s.fileKey)).filter(Boolean).length;
+    const monday = screenshots.filter(s => !s.invalid).map(s => getDay(0, s.fileKey)).filter(Boolean).length;
+    const tuesday = screenshots.filter(s => !s.invalid).map(s => getDay(1, s.fileKey)).filter(Boolean).length;
+    const wednesday = screenshots.filter(s => !s.invalid).map(s => getDay(2, s.fileKey)).filter(Boolean).length;
+    const thursday = screenshots.filter(s => !s.invalid).map(s => getDay(3, s.fileKey)).filter(Boolean).length;
+    const friday = screenshots.filter(s => !s.invalid).map(s => getDay(4, s.fileKey)).filter(Boolean).length;
+    const saturday = screenshots.filter(s => !s.invalid).map(s => getDay(5, s.fileKey)).filter(Boolean).length;
+    const sunday = screenshots.filter(s => !s.invalid).map(s => getDay(6, s.fileKey)).filter(Boolean).length;
     return {
       monday,
       tuesday,
@@ -232,6 +247,38 @@ function App() {
       sunday
     }
   }, [screenshots]);
+
+  const turnStats = useMemo(() => {
+    const turnCountMap: { [key: number]: number } = {};
+    for (let i = 0; i < screenshots.length; i += 1) {
+      const screenshot = screenshots[i];
+      if (screenshot.invalid) { continue }
+      const turnCount = screenshot.turnCount;
+      if (turnCountMap.hasOwnProperty(turnCount)) {
+        turnCountMap[turnCount] += 1;
+      } else {
+        turnCountMap[turnCount] = 1;
+      }
+    }
+    const keys = Object.keys(turnCountMap);
+    return keys.map(k => {
+      const key = parseInt(k);
+      return [key, turnCountMap[key]];
+    }).sort((a, b) => {
+      return a[0] - b[0]
+    })
+  }, [screenshots]);
+  const winsWithBandage = useMemo(() => {
+    const wins = screenshots.filter(x => !x.invalid);
+    let winsWithB = 0;
+    for (let i = 0; i < wins.length; i += 1) {
+      if (wins[i].hasBandage) {
+        winsWithB += 1;
+      }
+    }
+    return winsWithB;
+  }, [screenshots]);
+  const winsWithoutBandage = useMemo(() => totalWins - winsWithBandage, [totalWins, winsWithBandage]);
 
   if (!wasm) {
     return <div>loading wasm...</div>
@@ -249,6 +296,8 @@ function App() {
         pick directory
       </button>
       <h3>total wins: {totalWins}</h3>
+      <h4>wins without bandage: {winsWithoutBandage}</h4>
+      <h4>wins with bandage: {winsWithBandage}</h4>
       <ol>
         <li>wins on monday: {dayStats.monday} </li>
         <li>wins on tuesday: {dayStats.tuesday} </li>
@@ -257,6 +306,12 @@ function App() {
         <li>wins on friday: {dayStats.friday} </li>
         <li>wins on saturday: {dayStats.saturday} </li>
         <li>wins on sunday: {dayStats.sunday} </li>
+      </ol>
+      <ol>
+        {turnStats.map((val) => {
+          const [turnCount, num] = val;
+          return <li>Wins on turn {turnCount}: {num}</li>
+        })}
       </ol>
       <label>start at date: {startDateValue}</label>
       <input
@@ -282,7 +337,7 @@ function ScreenshotItem({ screenshot }: { screenshot: SAPScreenshot}) {
   const bandageText = screenshot.hasBandage ? 'has bandage' : '';
   return (
     <li>
-      {screenshot.fileKey} has {screenshot.numHearts} {bandageText}
+      {screenshot.fileKey} won @turn={screenshot.turnCount}. has {screenshot.numHearts} {bandageText}
     </li>
   )
 }
