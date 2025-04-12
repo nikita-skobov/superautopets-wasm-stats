@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+
+import * as echarts from 'echarts';
 
 async function getDir(setDirHandle: (h: any) => void) {
   // @ts-ignore
@@ -58,6 +60,42 @@ function getCachedData(): { [key: string]: SAPScreenshot } {
   } catch (e) {
     return {};
   }
+}
+
+function SvgChart({ chartCb }: { chartCb?: (e: echarts.ECharts) => void; }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [echartInstance, setEchartsInstance] = useState<echarts.ECharts>();
+  useEffect(() => {
+    if (!ref.current) { return }
+    // @ts-ignore
+    const e = echarts.init(ref.current, {}, { renderer: 'svg' });
+    setEchartsInstance(e);
+  }, [ref.current]);
+
+  useEffect(() => {
+    if (!echartInstance || !chartCb) { return }
+    chartCb(echartInstance);
+  }, [echartInstance, chartCb]);
+
+  return <div ref={ref} style={{ width: "1600px", height: "400px" }} />;
+}
+
+function getDate(datestring: string): Date {
+  const match = datestring.match(/_(\d*)-/);
+  let dateStr = '19900101';
+  if (match) {
+    dateStr = match?.[1] ?? '19900101';
+  }
+
+  const year = parseInt(dateStr.slice(0, 4), 10);
+  const month = parseInt(dateStr.slice(4, 6), 10) - 1; // JS Date months are 0-based
+  const day = parseInt(dateStr.slice(6, 8), 10);
+
+  return new Date(year, month, day);
+};
+
+function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
 }
 
 function App() {
@@ -209,18 +247,93 @@ function App() {
     return screenshots.filter((s) => !s.invalid).length
   }, [screenshots]);
 
-  const getDay = (dayOfWeek: number, datestring: string): boolean => {
-    const match = datestring.match(/_(\d*)-/);
-    let dateStr = '19900101';
-    if (match) {
-      dateStr = match?.[1] ?? '19900101';
+  const dateChartWins = useMemo(() => {
+    const dateMap: { [key: string]: SAPScreenshot[] } = {};
+    for (let i = 0; i < screenshots.length; i += 1) {
+      const s = screenshots[i];
+      if (s.invalid) { continue }
+      const date = getDate(s.fileKey);
+      const dateStr = formatDate(date);
+      if (dateMap.hasOwnProperty(dateStr)) {
+        dateMap[dateStr].push(s);
+      } else {
+        dateMap[dateStr] = [s];
+      }
     }
+    const flattened = Object.entries(dateMap).sort((a, b) => {
+      if(a[0] < b[0]){
+          return -1;
+      }else if(a[0] > b[0]){
+          return 1;
+      }
+      return 0;
+    });
+    const labels = [];
+    const winData = [];
+    const avgTurnCount = [];
+    for (let i = 0; i < flattened.length; i += 1) {
+      labels.push(flattened[i][0]);
+      winData.push(flattened[i][1].length);
+      let avg = 0;
+      for (let j = 0; j < flattened[i][1].length; j += 1) {
+        avg += flattened[i][1][j].turnCount;
+      }
+      avg /= flattened[i][1].length;
+      avgTurnCount.push(avg);
+    }
+    return { labels, winData, avgTurnCount }
+  }, [screenshots]);
 
-    const year = parseInt(dateStr.slice(0, 4), 10);
-    const month = parseInt(dateStr.slice(4, 6), 10) - 1; // JS Date months are 0-based
-    const day = parseInt(dateStr.slice(6, 8), 10);
-  
-    const date = new Date(year, month, day);
+  const echartsWinChartCb = useCallback((e: echarts.ECharts) => {
+    e.setOption({
+      title: {
+        text: 'Wins by date'
+      },
+      tooltip: {},
+      legend: {
+        data: ['wins']
+      },
+      xAxis: {
+        show: false,
+        data: dateChartWins.labels,
+      },
+      yAxis: {},
+      series: [
+        {
+          name: 'wins',
+          type: 'bar',
+          data: dateChartWins.winData,
+        }
+      ]
+    });
+  }, [dateChartWins]);
+
+  const echartsTurnChartCb = useCallback((e: echarts.ECharts) => {
+    e.setOption({
+      title: {
+        text: 'Avg win turn count by date'
+      },
+      tooltip: {},
+      legend: {
+        data: ['avg turn count']
+      },
+      xAxis: {
+        show: false,
+        data: dateChartWins.labels,
+      },
+      yAxis: {},
+      series: [
+        {
+          name: 'avg turn count',
+          type: 'bar',
+          data: dateChartWins.avgTurnCount,
+        }
+      ]
+    });
+  }, [dateChartWins]);
+
+  const getDay = (dayOfWeek: number, datestring: string): boolean => {
+    const date = getDate(datestring);
     
     // JS Date.getDay(): 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     // Shift it so Monday = 0, ..., Sunday = 6
@@ -313,6 +426,8 @@ function App() {
           return <li>Wins on turn {turnCount}: {num}</li>
         })}
       </ol>
+      <SvgChart chartCb={echartsWinChartCb} />
+      <SvgChart chartCb={echartsTurnChartCb} />
       <label>start at date: {startDateValue}</label>
       <input
         disabled={Boolean(dirHandle)}
